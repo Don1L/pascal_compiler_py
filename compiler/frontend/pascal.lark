@@ -1,0 +1,179 @@
+// ============================================================
+// Pascal subset — грамматика для Lark
+// ============================================================
+
+%import common.LETTER
+%import common.DIGIT
+%import common.WS
+
+%ignore WS
+%ignore COMMENT_LINE
+%ignore COMMENT_BLOCK1
+%ignore COMMENT_BLOCK2
+
+COMMENT_LINE:   /\/\/[^\n]*/
+COMMENT_BLOCK1: /\{[^}]*\}/
+COMMENT_BLOCK2: /\(\*(.|\n|\r)*?\*\)/
+
+// Ключевые слова (приоритет 2 — выше идентификаторов)
+KW_PROGRAM.2:   /[Pp][Rr][Oo][Gg][Rr][Aa][Mm]/
+KW_VAR.2:       /[Vv][Aa][Rr]/
+KW_BEGIN.2:     /[Bb][Ee][Gg][Ii][Nn]/
+KW_END.2:       /[Ee][Nn][Dd]/
+KW_IF.2:        /[Ii][Ff]/
+KW_THEN.2:      /[Tt][Hh][Ee][Nn]/
+KW_ELSE.2:      /[Ee][Ll][Ss][Ee]/
+KW_WHILE.2:     /[Ww][Hh][Ii][Ll][Ee]/
+KW_DO.2:        /[Dd][Oo]/
+KW_FOR.2:       /[Ff][Oo][Rr]/
+KW_TO.2:        /[Tt][Oo]/
+KW_DOWNTO.2:    /[Dd][Oo][Ww][Nn][Tt][Oo]/
+KW_REPEAT.2:    /[Rr][Ee][Pp][Ee][Aa][Tt]/
+KW_UNTIL.2:     /[Uu][Nn][Tt][Ii][Ll]/
+KW_BREAK.2:     /[Bb][Rr][Ee][Aa][Kk]/
+KW_CONTINUE.2:  /[Cc][Oo][Nn][Tt][Ii][Nn][Uu][Ee]/
+KW_FUNCTION.2:  /[Ff][Uu][Nn][Cc][Tt][Ii][Oo][Nn]/
+KW_PROCEDURE.2: /[Pp][Rr][Oo][Cc][Ee][Dd][Uu][Rr][Ee]/
+KW_DIV.2:       /[Dd][Ii][Vv]/
+KW_MOD.2:       /[Mm][Oo][Dd]/
+KW_AND.2:       /[Aa][Nn][Dd]/
+KW_OR.2:        /[Oo][Rr]/
+KW_NOT.2:       /[Nn][Oo][Tt]/
+KW_TRUE.2:      /[Tt][Rr][Uu][Ee]/
+KW_FALSE.2:     /[Ff][Aa][Ll][Ss][Ee]/
+KW_OF.2:        /[Oo][Ff]/
+KW_ARRAY.2:     /[Aa][Rr][Rr][Aa][Yy]/
+KW_INTEGER.2:   /[Ii][Nn][Tt][Ee][Gg][Ee][Rr]/
+KW_BOOLEAN.2:   /[Bb][Oo][Oo][Ll][Ee][Aa][Nn]/
+KW_CHAR.2:      /[Cc][Hh][Aa][Rr]/
+
+IDENT:    (LETTER | "_") (LETTER | DIGIT | "_")*
+INTEGER:  DIGIT+
+CHAR_LIT: "'" ( /[^']/ | "''" ) "'"
+
+ident:    IDENT
+integer:  INTEGER
+char_lit: CHAR_LIT
+bool_lit: KW_TRUE | KW_FALSE
+type_kw:  KW_INTEGER | KW_BOOLEAN | KW_CHAR
+
+// ============================================================
+// Типы
+// ============================================================
+
+type_node: type_kw                                              -> simple_type
+         | KW_ARRAY "[" integer ".." integer "]" KW_OF type_kw -> array_type
+
+// ============================================================
+// Выражения
+// ============================================================
+
+literal: integer | char_lit | bool_lit
+
+?primary: literal
+        | ident "[" expr "]"       -> array_access
+        | ident "(" args ")"       -> call
+        | ident
+        | "(" expr ")"
+
+args: (expr ("," expr)*)?
+
+?unary: primary
+      | "+"    unary               -> unary_plus
+      | "-"    unary               -> unary_minus
+      | KW_NOT unary               -> unary_not
+
+?term: unary
+     | term "*"    unary           -> mul
+     | term "/"    unary           -> fdiv
+     | term KW_DIV unary           -> div
+     | term KW_MOD unary           -> mod
+
+?arith: term
+      | arith "+" term             -> add
+      | arith "-" term             -> sub
+
+?compare: arith
+        | arith ">"  arith         -> gt
+        | arith ">=" arith         -> ge
+        | arith "<"  arith         -> lt
+        | arith "<=" arith         -> le
+        | arith "="  arith         -> eq
+        | arith "<>" arith         -> ne
+
+?logic_and: compare
+          | logic_and KW_AND compare   -> and_op
+
+?logic_or: logic_and
+         | logic_or KW_OR logic_and    -> or_op
+
+?expr: logic_or
+
+// ============================================================
+// Операторы
+// 
+// В Pascal точка с запятой — РАЗДЕЛИТЕЛЬ, а не терминатор.
+// Поэтому внутри if/while/for используем inner_stmt — без ';'.
+// В stmt_list операторы разделяются необязательными ';'.
+// ============================================================
+
+assign: ident ":=" expr
+      | ident "[" expr "]" ":=" expr  -> array_assign
+
+call_stmt: ident "(" args ")"
+
+// Оператор без завершающей ';' (используется внутри if/while/for)
+?inner_stmt: assign
+           | call_stmt
+           | compound_stmt
+           | if_stmt
+           | while_stmt
+           | repeat_stmt
+           | for_stmt
+           | KW_BREAK                  -> break_stmt
+           | KW_CONTINUE               -> continue_stmt
+
+// Оператор с завершающей ';'  
+?stmt: inner_stmt ";"
+     | compound_stmt
+     | if_stmt
+     | while_stmt
+     | repeat_stmt
+     | for_stmt
+     | KW_BREAK    ";"                 -> break_stmt
+     | KW_CONTINUE ";"                 -> continue_stmt
+     | ";"                             -> empty_stmt
+
+compound_stmt: KW_BEGIN stmt_list KW_END
+
+// stmt_list: операторы могут разделяться ';' — они уже включены в stmt
+stmt_list: stmt*
+
+if_stmt:     KW_IF expr KW_THEN inner_stmt (KW_ELSE inner_stmt)?
+while_stmt:  KW_WHILE expr KW_DO inner_stmt
+repeat_stmt: KW_REPEAT stmt_list KW_UNTIL expr ";"
+for_stmt:    KW_FOR ident ":=" expr KW_TO    expr KW_DO inner_stmt  -> for_to
+           | KW_FOR ident ":=" expr KW_DOWNTO expr KW_DO inner_stmt  -> for_downto
+
+// ============================================================
+// Объявления
+// ============================================================
+
+var_section: KW_VAR var_decl+
+var_decl:    ident_list ":" type_node ";"
+ident_list:  ident ("," ident)*
+
+param:       ident_list ":" type_node
+param_list:  param (";" param)*
+
+func_decl: KW_FUNCTION  ident "(" param_list? ")" ":" type_kw ";" func_body  -> function_decl
+         | KW_PROCEDURE ident "(" param_list? ")"             ";" func_body   -> procedure_decl
+func_body: var_section? KW_BEGIN stmt_list KW_END ";"
+
+// ============================================================
+// Программа
+// ============================================================
+
+program: KW_PROGRAM ident ";" var_section? func_decl* KW_BEGIN stmt_list KW_END "."
+
+?start: program
