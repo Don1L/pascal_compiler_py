@@ -1,8 +1,3 @@
-"""
-pipeline.py — связывает все этапы компилятора.
-
-Порядок: parse → semantic → optimize → (vm | x86)
-"""
 
 from compiler.frontend.parser import parse
 from compiler.frontend.ast_printer import AstPrinter
