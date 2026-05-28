@@ -7,14 +7,13 @@ from compiler.frontend.ast import *
 
 
 def _flatten(node: AstNode) -> list[AstNode]:
-    """Разворачивает StmtListNode в плоский список; одиночный узел возвращает как [node]."""
     if isinstance(node, StmtListNode):
         return list(node.stmts)
     return [node]
 
 
+# Печатает AST-дерево в виде дерева с отступами ASCII
 class AstPrinter:
-    """Печатает AST-дерево в виде дерева с отступами (├ └ │)."""
 
     @visitor.on('node')
     def view(self, node):

@@ -1,25 +1,11 @@
-"""
-vm.py — стековая виртуальная машина.
-
-Цикл fetch-decode-execute:
-  fetch  — читаем инструкцию по счётчику IP
-  decode — смотрим op
-  execute — выполняем, двигаем стек/память
-
-Память:
-  Каждый вызов функции создаёт новый Frame со своим словарём переменных.
-  Глобальные переменные живут в Frame основного тела.
-  Стек значений — общий (Python list).
-"""
-
 from compiler.backend.vm.opcodes import Op, Instr
 from compiler.backend.vm.codegen import Bytecode
 from compiler.frontend.ast import ProgramNode, VarDeclNode
 from compiler.errors import RuntimeException
 
 
+# Фрейм вызова: локальные переменные + адрес возврата
 class Frame:
-    """Фрейм вызова: локальные переменные + адрес возврата."""
 
     def __init__(self, code: list[Instr], ret_ip: int, ret_frame: 'Frame | None'):
         self.code      = code
@@ -27,7 +13,7 @@ class Frame:
         self.ret_ip    = ret_ip
         self.ret_frame = ret_frame
         self.vars: dict[str, object] = {}
-        self.array_lo: dict[str, int] = {}  # lo для массивов
+        self.array_lo: dict[str, int] = {}
 
     def get(self, name: str):
         if name in self.vars:
@@ -40,7 +26,6 @@ class Frame:
         raise RuntimeException(f'Переменная "{name}" не инициализирована')
 
     def get_lo(self, name: str) -> int:
-        """Возвращает нижнюю границу массива."""
         f: Frame = self
         while f:
             if name in f.array_lo:
@@ -60,8 +45,8 @@ class Frame:
         self.vars[name] = value
 
 
+# Стековая виртуальная машина
 class VM:
-    """Виртуальная машина."""
 
     def __init__(self):
         self._stack:  list = []
@@ -211,12 +196,6 @@ class VM:
                 func_code = self._bc.funcs[func_name]
                 new_frame = Frame(func_code, frame.ip, frame)
 
-                # Параметры кладём как переменные — имена берём из программы
-                # (хранятся в порядке объявления; используем позиционный доступ)
-                # Простой вариант: параметры называем _arg0, _arg1, ...
-                # Codegen при LOAD/STORE использует имя параметра из AST,
-                # поэтому нам нужно хранить их под правильными именами.
-                # Имена передаём через _bc.func_params (заполняется ниже).
                 param_names = self._bc.func_params.get(func_name, [])
                 for i, val in enumerate(args):
                     name = param_names[i] if i < len(param_names) else f'_arg{i}'

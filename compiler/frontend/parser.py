@@ -64,7 +64,7 @@ class _ASTBuilder(Transformer):
         return _pos(TypeNode(ch[0]), meta)
 
     def simple_type(self, meta, ch):
-        return ch[0]  # уже TypeNode из type_kw
+        return ch[0]
 
     def array_type(self, meta, ch):
         # ch: [LiteralNode(lo), LiteralNode(hi), TypeNode(elem)]
@@ -224,7 +224,7 @@ class _ASTBuilder(Transformer):
         for item in ch:
             if isinstance(item, Token):
                 continue
-            if isinstance(item, list):      # var_section returns list
+            if isinstance(item, list):
                 var_decls = item
             elif isinstance(item, StmtListNode):
                 body = item
@@ -233,9 +233,9 @@ class _ASTBuilder(Transformer):
     def function_decl(self, meta, ch):
         # ch: [Token(function), IdentNode, list[ParamNode]?, TypeNode, (var_decls, body)]
         items = [c for c in ch if not isinstance(c, Token)]
-        name       = items[0]                    # IdentNode
+        name       = items[0]
         params     = items[1] if isinstance(items[1], list) else []
-        ret_type   = items[2] if params else items[1]   # TypeNode
+        ret_type   = items[2] if params else items[1]
         body_tuple = items[3] if params else items[2]
         var_decls, body = body_tuple
         return _pos(FuncNode(

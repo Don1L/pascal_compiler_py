@@ -25,8 +25,8 @@ VOID, INTEGER, BOOLEAN, CHAR = (
 )
 
 
+# Описание типа: простой (integer/boolean/char) или функция, или массив
 class TypeDesc:
-    """Описание типа: простой (integer/boolean/char) или функция, или массив."""
 
     VOID:    'TypeDesc'
     INTEGER: 'TypeDesc'
@@ -105,10 +105,10 @@ class TypeDesc:
 # Синглтоны для базовых типов
 for _bt in BaseType:
     setattr(TypeDesc, _bt.name, TypeDesc(_bt))
-INTEGER = TypeDesc.INTEGER  # noqa
-BOOLEAN = TypeDesc.BOOLEAN  # noqa
-CHAR    = TypeDesc.CHAR     # noqa
-VOID    = TypeDesc.VOID     # noqa
+INTEGER = TypeDesc.INTEGER
+BOOLEAN = TypeDesc.BOOLEAN
+CHAR    = TypeDesc.CHAR
+VOID    = TypeDesc.VOID
 
 
  
@@ -124,8 +124,8 @@ class ScopeKind(Enum):
         return self.value
 
 
+# Запись о переменной/функции в таблице символов
 class IdentDesc:
-    """Запись о переменной/функции в таблице символов."""
 
     def __init__(self, name: str, type_: TypeDesc,
                  scope: ScopeKind = ScopeKind.GLOBAL, index: int = 0) -> None:
@@ -140,8 +140,8 @@ class IdentDesc:
         return f'{self.type}, {self.scope}{extra}'
 
 
+# Область видимости — узел связного списка областей
 class IdentScope:
-    """Область видимости — узел связного списка областей."""
 
     def __init__(self, parent: 'IdentScope' = None,
                  func: IdentDesc = None,
@@ -285,7 +285,7 @@ class SemanticChecker:
         elif isinstance(node.value, int):
             node.node_type = INTEGER
         elif isinstance(node.value, float):
-            node.node_type = INTEGER  # нет float в нашем подмножестве
+            node.node_type = INTEGER
         elif isinstance(node.value, str):
             node.node_type = CHAR
 
@@ -537,7 +537,6 @@ def _resolve_type(type_node: TypeNode) -> TypeDesc:
 
 
 def semantic_check(program: ProgramNode) -> IdentScope:
-    """Запускает семантический анализ. Возвращает глобальную область видимости."""
     global_scope = IdentScope()
     checker = SemanticChecker()
     checker.check(program, global_scope)

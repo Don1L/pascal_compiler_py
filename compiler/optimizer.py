@@ -1,34 +1,9 @@
-"""
-optimizer.py — оптимизации AST-дерева.
-
-Реализованы три оптимизации:
-
-1. Constant folding (свёртка констант)
-   2 + 3 * 4  →  14
-   true and false  →  false
-
-2. Algebraic simplification (упрощение выражений)
-   x + 0  →  x
-   x * 1  →  x
-   x * 0  →  0
-   x - 0  →  x
-   x / 1  →  x
-   not not x  →  x
-   0 - x  →  -x
-
-3. Dead code elimination (удаление мёртвого кода)
-   Операторы после break/continue в теле цикла недостижимы — удаляем.
-   if true then A else B  →  A
-   if false then A else B →  B
-"""
-
 from compiler.frontend.ast import *
 
 
 class Optimizer:
 
     def optimize(self, node: AstNode) -> AstNode:
-        """Точка входа — оптимизирует программу и возвращает новый AST."""
         return self._opt(node)
 
 
@@ -116,9 +91,9 @@ class Optimizer:
         # Если условие — константа, убираем ветвление
         if isinstance(node.cond, LiteralNode):
             if node.cond.value:
-                return node.then_stmt   # if true → всегда then
+                return node.then_stmt
             else:
-                return node.else_stmt or StmtListNode()  # if false → всегда else
+                return node.else_stmt or StmtListNode()
 
         return node
 
@@ -214,7 +189,6 @@ class Optimizer:
 
     @staticmethod
     def _fold(op: BinOp, a, b):
-        """Вычисляет бинарную операцию над константами. Возвращает None если нельзя."""
         try:
             if op == BinOp.ADD:  return a + b
             if op == BinOp.SUB:  return a - b
@@ -319,5 +293,4 @@ def _make_neg(node: AstNode, src: AstNode) -> UnOpNode:
 # Публичная функция
 
 def optimize(program: ProgramNode) -> ProgramNode:
-    """Запускает все оптимизации и возвращает изменённое дерево."""
     return Optimizer().optimize(program)

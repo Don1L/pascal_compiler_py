@@ -1,22 +1,15 @@
-"""
-codegen.py — компилятор из AST в байткод.
-
-Обходит дерево и выдаёт список инструкций (Instr).
-Управляющие конструкции (if/while/for) реализуются через метки и JUMP.
-"""
-
 from compiler.frontend.ast import *
 from compiler.backend.vm.opcodes import Op, Instr
 
 
+# Результат компиляции: инструкции + таблица функций
 class Bytecode:
-    """Результат компиляции: инструкции + таблица функций."""
 
     def __init__(self):
-        self.main:  list[Instr] = []          # инструкции основного тела
-        self.funcs: dict[str, list[Instr]] = {}  # имя → инструкции функции
-        self.func_params: dict[str, list[str]] = {}  # имя → список имён параметров
-        self.func_locals:  dict[str, list[tuple]] = {}  # имя → [(var_name, type_name)]
+        self.main:        list[Instr]              = []
+        self.funcs:       dict[str, list[Instr]]   = {}
+        self.func_params: dict[str, list[str]]     = {}
+        self.func_locals: dict[str, list[tuple]]   = {}
 
     def disassemble(self) -> str:
         lines = ['=== main ===']
@@ -29,8 +22,8 @@ class Bytecode:
         return '\n'.join(lines)
 
 
+# Метка — пока не разрешена, хранит имя
 class _Label:
-    """Метка — пока не разрешена, хранит имя."""
     _counter = 0
 
     def __init__(self, name: str = ''):
@@ -41,13 +34,13 @@ class _Label:
         return f'<{self.name}>'
 
 
+# Генерирует байткод для одной функции (или главного тела)
 class CodeGen:
-    """Генерирует байткод для одной функции (или главного тела)."""
 
     def __init__(self):
         self._code:  list[Instr | _Label] = []
-        self._loops: list[tuple[_Label, _Label]] = []  # (start, end) для break/continue
-        self._func_name: str | None = None  # имя текущей функции
+        self._loops:     list[tuple[_Label, _Label]] = []
+        self._func_name: str | None                  = None
 
     
     #  Публичный API
@@ -61,11 +54,9 @@ class CodeGen:
         return lbl
 
     def place(self, lbl: _Label) -> None:
-        """Вставить метку в поток инструкций."""
         self._code.append(lbl)
 
     def resolve(self) -> list[Instr]:
-        """Заменить метки числовыми адресами и вернуть готовый список."""
         # Первый проход: собираем адреса меток (метки не занимают слот)
         addr: dict[str, int] = {}
         idx = 0

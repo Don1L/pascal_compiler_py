@@ -8,23 +8,22 @@ if TYPE_CHECKING:
 
 
 def ast_dataclass(cls, **kwargs):
-    """dataclass без автоматического repr — используем свой __str__"""
     return dataclass(cls, repr=False, **kwargs)
 
 
 # Базовые классы
 
+# Базовый класс всех узлов AST
 class AstNode(ABC):
-    """Базовый класс всех узлов AST."""
 
     row: int = None
     col: int = None
-    node_type: 'TypeDesc' = None   # заполняется семантическим анализатором
-    node_ident: 'IdentDesc' = None  # заполняется семантическим анализатором
+    # заполняется семантическим анализатором
+    node_type:  'TypeDesc'  = None
+    node_ident: 'IdentDesc' = None
 
     @property
     def children(self) -> Sequence['AstNode']:
-        """Дети узла — все поля-AstNode и элементы полей-Sequence[AstNode]."""
         result: list[AstNode] = []
         for v in self.__dict__.values():
             if isinstance(v, AstNode):
@@ -42,7 +41,7 @@ class AstNode(ABC):
                 val = getattr(self, field_name)
                 if val is None:
                     continue
-                if hasattr(val, 'value'):       # Enum
+                if hasattr(val, 'value'):
                     return str(val.value)
                 if isinstance(val, AstNode):
                     return str(val)
@@ -72,7 +71,6 @@ class StmtNode(AstNode, ABC):
 
 @ast_dataclass
 class LiteralNode(ValueNode):
-    """Литерал: целое число, boolean, char."""
     literal: str
     value: Any
 
@@ -98,7 +96,6 @@ class LiteralNode(ValueNode):
 
 @ast_dataclass
 class IdentNode(ExprNode):
-    """Имя переменной / функции."""
     name: str
 
     def __str__(self) -> str:
@@ -107,9 +104,8 @@ class IdentNode(ExprNode):
 
 @ast_dataclass
 class TypeNode(ExprNode):
-    """Узел типа данных: integer, boolean, char, array[lo..hi] of T."""
-    name: str                        # 'integer' | 'boolean' | 'char' | 'array'
-    elem_type: Optional['TypeNode'] = None  # для array
+    name: str
+    elem_type: Optional['TypeNode'] = None
     lo: Optional[int] = None
     hi: Optional[int] = None
 
@@ -127,7 +123,7 @@ class BinOp(Enum):
     ADD = '+'
     SUB = '-'
     MUL = '*'
-    FDIV = '/'      # вещественное деление (на всякий случай)
+    FDIV = '/'
     DIV = 'div'
     MOD = 'mod'
     GT = '>'
@@ -171,13 +167,12 @@ class UnOpNode(ExprNode):
 
 @ast_dataclass
 class AssignNode(StmtNode):
-    var: ExprNode       # IdentNode или ArrayAccessNode
+    var: ExprNode
     value: ExprNode
 
 
 @ast_dataclass
 class ArrayAccessNode(ExprNode):
-    """Обращение к элементу массива: a[i]"""
     arr: IdentNode
     index: ExprNode
 
@@ -187,7 +182,6 @@ class ArrayAccessNode(ExprNode):
 
 @ast_dataclass
 class CallNode(ExprNode, StmtNode):
-    """Вызов функции / процедуры: Write, WriteLn, Inc, Dec, Abs, пользовательские."""
     name: IdentNode
     params: Sequence[ExprNode]
 
@@ -205,7 +199,6 @@ class CallNode(ExprNode, StmtNode):
 
 @ast_dataclass
 class VarDeclNode(StmtNode):
-    """Объявление одной или нескольких переменных одного типа: x, y: integer"""
     type: TypeNode
     vars: Sequence[IdentNode]
 
@@ -219,7 +212,6 @@ class VarDeclNode(StmtNode):
 
 @ast_dataclass
 class ParamNode(StmtNode):
-    """Параметр функции/процедуры: a: integer"""
     type: TypeNode
     name: IdentNode
 
@@ -229,8 +221,7 @@ class ParamNode(StmtNode):
 
 @ast_dataclass
 class FuncNode(StmtNode):
-    """Объявление функции или процедуры."""
-    return_type: Optional[TypeNode]   # None для procedure
+    return_type: Optional[TypeNode]
     name: IdentNode
     params: Sequence[ParamNode]
     var_decls: Sequence[VarDeclNode]
@@ -248,7 +239,6 @@ class FuncNode(StmtNode):
 
 @ast_dataclass
 class StmtListNode(StmtNode):
-    """Последовательность операторов (begin … end или тело программы)."""
     stmts: Sequence[StmtNode]
 
     def __init__(self, *stmts: StmtNode) -> None:
@@ -289,7 +279,6 @@ class WhileNode(StmtNode):
 
 @ast_dataclass
 class RepeatNode(StmtNode):
-    """repeat … until cond"""
     body: StmtListNode
     cond: ExprNode
 
@@ -299,7 +288,6 @@ class RepeatNode(StmtNode):
 
 @ast_dataclass
 class ForNode(StmtNode):
-    """for var := start to/downto finish do body"""
     var: IdentNode
     start: ExprNode
     finish: ExprNode
@@ -337,7 +325,6 @@ class ReturnNode(StmtNode):
 
 @ast_dataclass
 class ProgramNode(AstNode):
-    """Корень AST: program Name; var ...; begin ... end."""
     name: IdentNode
     var_decls: Sequence[VarDeclNode]
     func_decls: Sequence[FuncNode]
@@ -353,7 +340,6 @@ class ProgramNode(AstNode):
 
 @ast_dataclass
 class TypeConvertNode(ExprNode):
-    """Неявное приведение типа, добавляемое семантикой."""
     value: ExprNode
     type: 'TypeDesc'
 

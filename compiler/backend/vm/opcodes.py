@@ -2,25 +2,25 @@ from enum import Enum, auto
 
 
 class Op(Enum):
-    #   Стек                        
-    PUSH        = auto()   # PUSH value — положить константу на стек
-    POP         = auto()   # POP                 — снять верхушку стека
+    # Стек
+    PUSH        = auto()
+    POP         = auto()
 
-    #   Переменные                     
-    LOAD        = auto()   # LOAD name — загрузить значение переменной
-    STORE       = auto()   # STORE name — сохранить верхушку в переменную
-    LOAD_IDX    = auto()   # LOAD_IDX name — загрузить a[стек] (индекс берётся со стека)
-    STORE_IDX   = auto()   # STORE_IDX name — a[стек[-2]] = стек[-1]
+    # Переменные
+    LOAD        = auto()
+    STORE       = auto()
+    LOAD_IDX    = auto()
+    STORE_IDX   = auto()
 
-    #   Арифметика                     
+    # Арифметика
     ADD         = auto()
     SUB         = auto()
     MUL         = auto()
-    DIV         = auto()   # целочисленное
+    DIV         = auto()
     MOD         = auto()
-    NEG         = auto()   # унарный минус
+    NEG         = auto()
 
-    #   Сравнения (результат: True/False)
+    # Сравнения
     EQ          = auto()
     NE          = auto()
     LT          = auto()
@@ -28,35 +28,34 @@ class Op(Enum):
     GT          = auto()
     GE          = auto()
 
-    #   Логика                       
+    # Логика
     AND         = auto()
     OR          = auto()
     NOT         = auto()
 
-    #   Переходы                      
-    JUMP        = auto()   # JUMP label — безусловный переход
-    JUMP_FALSE  = auto()   # JUMP_FALSE label    — переход если False на стеке
+    # Переходы
+    JUMP        = auto()
+    JUMP_FALSE  = auto()
 
-    #   Функции
-    CALL        = auto()   # CALL name n_args — вызов функции, n_args аргументов на стеке
-    RETURN      = auto()   # RETURN — возврат (значение на стеке или None)
-    RETURN_NONE = auto()   # RETURN_NONE — возврат из процедуры без значения
+    # Функции
+    CALL        = auto()
+    RETURN      = auto()
+    RETURN_NONE = auto()
 
-    #   Встроенные операции
-    PRINT       = auto()   # PRINT newline — вывод верхушки стека
-    READ        = auto()   # READ type name — ввод в переменную
+    # Ввод/вывод
+    PRINT       = auto()
+    READ        = auto()
 
-    #   Системные функции
-    INC         = auto()   # INC name
-    DEC         = auto()   # DEC name
-    ABS         = auto()   # ABS  — abs(стек)
+    # Системные
+    INC         = auto()
+    DEC         = auto()
+    ABS         = auto()
 
-    #   Конец программы
     HALT        = auto()
 
 
+# Одна инструкция байткода
 class Instr:
-    """Одна инструкция байткода."""
 
     __slots__ = ('op', 'arg', 'row')
 
