@@ -14,7 +14,11 @@ run.py — точка входа и CLI.
 
 import argparse
 import sys
+import io
 from pathlib import Path
+
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ('utf-8', 'utf8'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 sys.path.insert(0, str(Path(__file__).parent))
 

@@ -6,6 +6,13 @@ from compiler.analysis import visitor
 from compiler.frontend.ast import *
 
 
+def _flatten(node: AstNode) -> list[AstNode]:
+    """Разворачивает StmtListNode в плоский список; одиночный узел возвращает как [node]."""
+    if isinstance(node, StmtListNode):
+        return list(node.stmts)
+    return [node]
+
+
 class AstPrinter:
     """Печатает AST-дерево в виде дерева с отступами (├ └ │)."""
 
@@ -29,17 +36,36 @@ class AstPrinter:
     def view(self, node: TypeNode) -> tuple[str, Sequence]:
         return str(node), ()
 
-    @visitor.when(AssignNode)
-    def view(self, node: AssignNode) -> tuple[str, Sequence]:
-        return 'assign', (node.var, node.value)
-
     @visitor.when(VarDeclNode)
     def view(self, node: VarDeclNode) -> tuple[str, Sequence]:
-        return 'var_decl', (node.type, *node.vars)
+        names = ', '.join(v.name for v in node.vars)
+        return f'var {names}: {node.type}', ()
 
     @visitor.when(ParamNode)
     def view(self, node: ParamNode) -> tuple[str, Sequence]:
-        return 'param', (node.name, node.type)
+        return f'param {node.name}: {node.type}', ()
+
+    @visitor.when(FuncNode)
+    def view(self, node: FuncNode) -> tuple[str, Sequence]:
+        kind = 'procedure' if node.return_type is None else 'function'
+        params = ', '.join(f'{p.name}: {p.type}' for p in node.params)
+        ret = f': {node.return_type}' if node.return_type else ''
+        label = f'{kind} {node.name}({params}){ret}'
+        children = list(node.var_decls) + _flatten(node.body)
+        return label, children
+
+    @visitor.when(ProgramNode)
+    def view(self, node: ProgramNode) -> tuple[str, Sequence]:
+        children = list(node.var_decls) + list(node.func_decls) + _flatten(node.body)
+        return f'program {node.name}', children
+
+    @visitor.when(StmtListNode)
+    def view(self, node: StmtListNode) -> tuple[str, Sequence]:
+        return 'block', node.stmts
+
+    @visitor.when(AssignNode)
+    def view(self, node: AssignNode) -> tuple[str, Sequence]:
+        return ':=', (node.var, node.value)
 
     @visitor.when(CallNode)
     def view(self, node: CallNode) -> tuple[str, Sequence]:
@@ -47,23 +73,23 @@ class AstPrinter:
 
     @visitor.when(IfNode)
     def view(self, node: IfNode) -> tuple[str, Sequence]:
-        children = [node.cond, node.then_stmt]
+        children: list[AstNode] = [node.cond] + _flatten(node.then_stmt)
         if node.else_stmt:
-            children.append(node.else_stmt)
+            children += _flatten(node.else_stmt)
         return 'if', children
 
     @visitor.when(WhileNode)
     def view(self, node: WhileNode) -> tuple[str, Sequence]:
-        return 'while', (node.cond, node.body)
+        return 'while', [node.cond] + _flatten(node.body)
 
     @visitor.when(ForNode)
     def view(self, node: ForNode) -> tuple[str, Sequence]:
         direction = 'downto' if node.downto else 'to'
-        return f'for ({direction})', (node.var, node.start, node.finish, node.body)
+        return f'for ({direction})', [node.var, node.start, node.finish] + _flatten(node.body)
 
     @visitor.when(RepeatNode)
     def view(self, node: RepeatNode) -> tuple[str, Sequence]:
-        return 'repeat', (node.body, node.cond)
+        return 'repeat', _flatten(node.body) + [node.cond]
 
     @visitor.when(BinOpNode)
     def view(self, node: BinOpNode) -> tuple[str, Sequence]:
@@ -72,21 +98,6 @@ class AstPrinter:
     @visitor.when(UnOpNode)
     def view(self, node: UnOpNode) -> tuple[str, Sequence]:
         return str(node.op), (node.arg,)
-
-    @visitor.when(StmtListNode)
-    def view(self, node: StmtListNode) -> tuple[str, Sequence]:
-        return 'stmt_list', node.stmts
-
-    @visitor.when(ProgramNode)
-    def view(self, node: ProgramNode) -> tuple[str, Sequence]:
-        children = list(node.var_decls) + list(node.func_decls) + [node.body]
-        return f'program {node.name}', children
-
-    @visitor.when(FuncNode)
-    def view(self, node: FuncNode) -> tuple[str, Sequence]:
-        kind = 'procedure' if node.return_type is None else 'function'
-        children = list(node.params) + list(node.var_decls) + [node.body]
-        return f'{kind} {node.name}', children
 
     @visitor.when(TypeConvertNode)
     def view(self, node: TypeConvertNode) -> tuple[str, Sequence]:
@@ -127,8 +138,8 @@ class AstPrinter:
         children = list(children)
         for i, child in enumerate(children):
             is_last = (i == len(children) - 1)
-            prefix0 = '└ ' if is_last else '├ '
-            prefixN = '  ' if is_last else '│ '
+            prefix0 = '\\-- ' if is_last else '+-- '
+            prefixN = '    ' if is_last else '|   '
             for j, line in enumerate(self._tree_lines(child)):
                 lines.append((prefix0 if j == 0 else prefixN) + line)
         return lines
