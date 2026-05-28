@@ -1,5 +1,3 @@
-# The MIT License (MIT)
-# Copyright (c) 2019 Curtis Schlak
 import inspect
 
 __all__ = ['on', 'when']

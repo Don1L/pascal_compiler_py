@@ -1,4 +1,3 @@
-
 from compiler.frontend.parser import parse
 from compiler.frontend.ast_printer import AstPrinter
 from compiler.analysis.semantic import semantic_check
