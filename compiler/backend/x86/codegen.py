@@ -1,20 +1,4 @@
-"""
-codegen.py — компилятор из AST в x86 NASM-листинг (32-bit, Linux/libc).
 
-Генерирует текстовый .asm файл который можно собрать командами:
-    nasm -f elf32 output.asm -o output.o
-    gcc -m32 output.o -o output
-    ./output
-
-Архитектура:
-  - Глобальные переменные → секция .bss (resd/resb)
-  - Локальные переменные функций → стек ([ebp - N])
-  - Параметры функций → стек ([ebp + 8], [ebp + 12], ...)
-  - Вычисления → через регистры eax/ebx/ecx/edx
-  - WriteLn/Write → через printf из libc
-  - ReadLn/Read   → через scanf из libc
-  - Стековый фрейм: push ebp / mov ebp, esp / sub esp, N / pop ebp / ret
-"""
 
 from io import StringIO
 from compiler.frontend.ast import *
