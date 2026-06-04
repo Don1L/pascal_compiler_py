@@ -10,30 +10,6 @@ pip install lark
 
 ---
 
-## Содержание
-
-1. [Быстрый старт](#быстрый-старт)
-2. [CLI — флаги и опции](#cli--флаги-и-опции)
-3. [Язык Pascal](#язык-pascal)
-   - [Типы данных](#типы-данных)
-   - [Операции](#операции)
-   - [Управляющие конструкции](#управляющие-конструкции)
-   - [Процедуры и функции](#процедуры-и-функции)
-   - [Встроенные функции](#встроенные-функции)
-   - [Комментарии](#комментарии)
-4. [Архитектура компилятора](#архитектура-компилятора)
-5. [Стадии компиляции](#стадии-компиляции)
-   - [Парсинг и AST](#парсинг-и-ast)
-   - [Семантический анализ](#семантический-анализ)
-   - [Оптимизации](#оптимизации)
-   - [Бэкенд: виртуальная машина](#бэкенд-виртуальная-машина)
-   - [Бэкенд: x86-32](#бэкенд-x86-32)
-6. [Примеры программ](#примеры-программ)
-7. [Запуск через Docker](#запуск-через-docker)
-8. [Структура проекта](#структура-проекта)
-
----
-
 ## Быстрый старт
 
 ### Локально
@@ -124,203 +100,77 @@ python run.py examples/factorial.pas --x86 --out factorial.asm
 
 ## Язык Pascal
 
-Компилятор поддерживает подмножество стандартного Pascal. Программа имеет структуру:
+Структура программы:
 
 ```pascal
 program <Имя>;
-
-var
-  <переменные>;
-
-<объявления функций и процедур>
-
-begin
-  <операторы>
-end.
+var <переменные>;
+<функции и процедуры>
+begin <операторы> end.
 ```
 
 ### Типы данных
 
-| Тип | Описание | Примеры значений |
-|-----|----------|-----------------|
-| `integer` | Целое число | `42`, `-7`, `0` |
-| `boolean` | Логический | `true`, `false` |
-| `char` | Символ | `'a'`, `'Z'`, `''''` (одиночная кавычка) |
-| `array[lo..hi] of T` | Массив | `array[1..10] of integer` |
-
-Массивы могут иметь любые целочисленные границы, в том числе с нуля: `array[0..9] of boolean`.
+| Тип | Примеры |
+|-----|---------|
+| `integer` | `42`, `-7` |
+| `boolean` | `true`, `false` |
+| `char` | `'a'`, `''''` |
+| `array[lo..hi] of T` | `array[1..10] of integer` |
 
 ### Операции
 
-| Группа | Операции | Типы операндов | Тип результата |
-|--------|----------|----------------|----------------|
-| Арифметика | `+`, `-`, `*` | `integer` | `integer` |
-| Целочисленное деление | `/`, `div` | `integer` | `integer` |
-| Остаток | `mod` | `integer` | `integer` |
-| Сравнение | `=`, `<>`, `<`, `<=`, `>`, `>=` | `integer`, `char` | `boolean` |
-| Равенство | `=`, `<>` | `boolean` | `boolean` |
-| Логика | `and`, `or` | `boolean` | `boolean` |
-| Отрицание | `not` | `boolean` | `boolean` |
-| Унарный минус | `-` | `integer` | `integer` |
-| Унарный плюс | `+` | `integer` | `integer` |
+| Группа | Операции | Результат |
+|--------|----------|-----------|
+| Арифметика | `+`, `-`, `*`, `/`, `div`, `mod` | `integer` |
+| Сравнение | `=`, `<>`, `<`, `<=`, `>`, `>=` | `boolean` |
+| Логика | `and`, `or`, `not` | `boolean` |
+| Унарные | `+`, `-`, `not` | — |
 
-> Для `integer` операции `/` и `div` идентичны — результат целый.
-
-**Приоритет операций** (от высшего к низшему):
-
-```
-1. Унарные:       not, унарный -/+
-2. Мультипликативные: *, /, div, mod, and
-3. Аддитивные:    +, -, or
-4. Сравнение:     =, <>, <, <=, >, >=
-```
-
-`and` и `or` используют **ленивые вычисления**: правый операнд не вычисляется, если результат уже известен по левому.
+Приоритет: `not`/унарный → `*`/`div`/`mod`/`and` → `+`/`-`/`or` → сравнение. `/` и `div` идентичны для `integer`. `and`/`or` — ленивые.
 
 ### Управляющие конструкции
 
-#### Присваивание
-
 ```pascal
-x := 42;
-a[i] := x + 1;
+x := expr;                          { присваивание }
+a[i] := expr;                       { элемент массива }
+if cond then stmt [else stmt];      { ветвление }
+while cond do stmt;                 { цикл while }
+repeat stmt until cond;             { цикл repeat }
+for i := a to b do stmt;           { for (downto — убывающий) }
+begin stmt; stmt; ... end           { блок; ; — разделитель, не терминатор }
 ```
 
-#### Условие
-
-```pascal
-if x > 0 then
-  WriteLn(x);
-
-if x > 0 then
-  WriteLn(x)
-else
-  WriteLn(0);
-```
-
-#### Цикл while
-
-```pascal
-while i <= 10 do
-begin
-  WriteLn(i);
-  i := i + 1;
-end;
-```
-
-#### Цикл repeat..until
-
-```pascal
-repeat
-  ReadLn(x);
-until x > 0;
-```
-
-#### Цикл for
-
-```pascal
-for i := 1 to 10 do     { возрастающий, шаг +1 }
-  s := s + i;
-
-for i := 10 downto 1 do  { убывающий, шаг -1 }
-  WriteLn(i);
-```
-
-#### break и continue
-
-Работают внутри любого цикла (`while`, `repeat`, `for`):
-
-```pascal
-while true do
-begin
-  i := i + 1;
-  if i mod 2 = 0 then continue;  { перейти к следующей итерации }
-  if i > 10 then break;           { выйти из цикла }
-  WriteLn(i);
-end;
-```
-
-#### Блок операторов
-
-```pascal
-begin
-  stmt1;
-  stmt2;
-  stmt3
-end
-```
-
-Точка с запятой — **разделитель** между операторами (не терминатор), перед `end` не ставится.
+`break` и `continue` работают внутри любого цикла.
 
 ### Процедуры и функции
 
-#### Объявление процедуры
-
 ```pascal
-procedure PrintSquare(x: integer);
-begin
-  WriteLn(x * x);
-end;
-```
+procedure Foo(x: integer);
+begin WriteLn(x); end;
 
-#### Объявление функции
-
-```pascal
 function Max(a: integer; b: integer): integer;
+var tmp: integer;
 begin
-  if a > b then
-    Max := a
-  else
-    Max := b;
+  if a > b then Max := a else Max := b;
 end;
 ```
 
-Возврат значения — присвоение имени функции: `FuncName := value`.
-
-#### Локальные переменные
-
-```pascal
-function Fib(n: integer): integer;
-var
-  a: integer;
-  b: integer;
-begin
-  { ... }
-end;
-```
-
-#### Вызов
-
-```pascal
-PrintSquare(5);
-result := Max(a, b);
-WriteLn(fact(n));   { вложенный вызов }
-```
-
-Параметры передаются **по значению**. Рекурсия поддерживается.
+Возврат — присвоение имени функции: `Max := value`. Параметры по значению. Рекурсия поддерживается.
 
 ### Встроенные функции
 
-| Функция | Аргумент | Описание |
-|---------|----------|----------|
-| `Write(x)` | `integer`, `boolean`, `char` | Вывод без переноса строки |
-| `WriteLn(x)` | `integer`, `boolean`, `char` | Вывод с переносом строки |
-| `Read(x)` | переменная `integer` или `char` | Ввод |
-| `ReadLn(x)` | переменная `integer` или `char` | Ввод |
-| `Inc(x)` | переменная `integer` | Увеличить на 1 (`x := x + 1`) |
-| `Dec(x)` | переменная `integer` | Уменьшить на 1 (`x := x - 1`) |
-| `Abs(x)` | `integer` | Модуль числа |
-
-`boolean` выводится как `TRUE` / `FALSE` (заглавными буквами).
+| Функция | Описание |
+|---------|----------|
+| `Write(x)`, `WriteLn(x)` | Вывод `integer`/`boolean`/`char`; `boolean` → `TRUE`/`FALSE` |
+| `Read(x)`, `ReadLn(x)` | Ввод в переменную |
+| `Inc(x)`, `Dec(x)` | `x ± 1` |
+| `Abs(x)` | Модуль числа |
 
 ### Комментарии
 
 ```pascal
-// Однострочный комментарий
-
-{ Блочный комментарий }
-
-(* Ещё один блочный комментарий *)
+// однострочный    { блочный }    (* блочный *)
 ```
 
 ---
@@ -388,47 +238,17 @@ WriteLn(fact(n));   { вложенный вызов }
 
 ### Парсинг и AST
 
-Парсер использует библиотеку **Lark** с алгоритмом Earley и грамматикой в файле `pascal.lark`. Грамматика регистронезависима (ключевые слова можно писать в любом регистре).
-
-Результат парсинга — дерево объектов `AstNode`. Основные узлы:
-
-| Узел | Описание |
-|------|----------|
-| `ProgramNode` | Корень: имя, глобальные переменные, функции, тело |
-| `FuncNode` | Функция или процедура |
-| `VarDeclNode` | Объявление переменных |
-| `StmtListNode` | Список операторов |
-| `AssignNode` | Присваивание |
-| `IfNode` | Ветвление |
-| `WhileNode` | Цикл while |
-| `RepeatNode` | Цикл repeat..until |
-| `ForNode` | Цикл for |
-| `BreakNode`, `ContinueNode` | Управление циклом |
-| `CallNode` | Вызов функции / процедуры |
-| `BinOpNode` | Бинарная операция |
-| `UnOpNode` | Унарная операция |
-| `LiteralNode` | Литерал (число, булево, символ) |
-| `IdentNode` | Идентификатор |
-| `ArrayAccessNode` | Доступ к элементу массива `a[i]` |
-
-Просмотр AST:
+Парсер использует **Lark** (алгоритм Earley), грамматика в `pascal.lark`, регистронезависима. Результат — дерево `AstNode`-объектов: `ProgramNode`, `FuncNode`, `AssignNode`, `IfNode`, `WhileNode`, `ForNode`, `RepeatNode`, `CallNode`, `BinOpNode`, `LiteralNode`, `IdentNode`, `ArrayAccessNode` и др.
 
 ```bash
 python run.py examples/factorial.pas --ast --parse-only
 ```
 
-Пример вывода:
-
 ```
 program Factorial
 +-- var n: integer
-+-- var result: integer
 +-- function fact(n: integer): integer
-|   \-- block
-|       \-- if
-|           +-- (n <= 1)
-|           +-- (fact := 1)
-|           \-- (fact := n * fact(n - 1))
+|   \-- if (n <= 1) → fact:=1 | fact:=n*fact(n-1)
 \-- block
     +-- (n := 6)
     \-- WriteLn(fact(n))
@@ -436,36 +256,10 @@ program Factorial
 
 ### Семантический анализ
 
-Модуль `semantic.py` обходит AST и выполняет:
-
-**Таблица символов** — стек областей видимости (`IdentScope`):
-- Глобальная область: переменные программы и имена функций
-- Локальная область функции: параметры + локальные переменные
-
-**Проверки типов:**
-- Тип каждого выражения вычисляется и проставляется в поле `node.node_type`
-- Несовместимые типы в операциях → `SemanticException`
-- Присваивание совместимых типов (целое → вещественное — авто-конвертация через `TypeConvertNode`)
-
-**Другие проверки:**
-- Использование необъявленных переменных
-- Вызов несуществующих функций
-- Количество и типы аргументов при вызове
-- `break` / `continue` только внутри цикла
-- Условие в `if` / `while` должно быть `boolean`
-- Индекс массива должен быть `integer`
-
-**Встроенные операторы и их типы:**
-
-```
-NOT boolean → boolean
-+, - integer → integer
-integer + integer → integer
-integer < integer → boolean
-boolean and boolean → boolean
-```
-
-Просмотр AST после семантики:
+Строит таблицу символов (стек областей видимости) и проверяет:
+- типы операндов и совместимость в операциях / присваивании
+- объявленность переменных и функций, соответствие числа и типов аргументов
+- `break`/`continue` только внутри цикла, условия `if`/`while` — `boolean`, индексы массивов — `integer`
 
 ```bash
 python run.py examples/factorial.pas --sem --sem-only
@@ -473,56 +267,13 @@ python run.py examples/factorial.pas --sem --sem-only
 
 ### Оптимизации
 
-Оптимизатор обходит AST и трансформирует узлы. Выполняется за один проход.
+За один проход по AST:
 
-#### Свёртка констант
-
-Выражения из литералов вычисляются на этапе компиляции:
-
-```pascal
-x := 2 + 3 * 4;   { → x := 14 }
-x := 10 div 3;    { → x := 3  }
-flag := 3 > 1;    { → flag := true }
-```
-
-#### Алгебраические упрощения
-
-| До | После |
-|----|-------|
-| `x + 0` | `x` |
-| `x - 0` | `x` |
-| `0 - x` | `-x` |
-| `x * 0` | `0` |
-| `x * 1` | `x` |
-| `x / 1` | `x` |
-| `x mod 1` | `0` |
-| `true and x` | `x` |
-| `false and x` | `false` |
-| `true or x` | `true` |
-| `false or x` | `x` |
-| `not (not x)` | `x` |
-| `-(-x)` | `x` |
-
-#### Удаление мёртвого кода
-
-```pascal
-{ Недостижимый код после break/continue убирается }
-while true do
-begin
-  break;
-  WriteLn(999);  { удаляется }
-end;
-
-{ Цикл с заведомо ложным условием убирается целиком }
-while false do
-  WriteLn(1);   { удаляется весь while }
-
-{ Ветка if с константным условием }
-if true then x := 1 else x := 2;   { → x := 1 }
-if false then x := 999;             { → убирается }
-```
-
-Просмотр AST до и после оптимизации:
+| Вид | Пример |
+|-----|--------|
+| Свёртка констант | `2 + 3*4` → `14` |
+| Алгебраические упрощения | `x*1`→`x`, `x+0`→`x`, `not not x`→`x`, `x*0`→`0`, `-(-x)`→`x` |
+| Мёртвый код | код после `break`/`continue`, `while false do ...`, `if false then ...` |
 
 ```bash
 python run.py examples/optimizations.pas --sem --opt --sem-only
@@ -530,131 +281,18 @@ python run.py examples/optimizations.pas --sem --opt --sem-only
 
 ### Бэкенд: виртуальная машина
 
-Стековая VM с набором из 55 инструкций.
-
-#### Модель выполнения
-
-- **Стек значений** — для вычисления выражений
-- **Фреймы** — у каждой функции свой фрейм с локальными переменными
-- **Указатель инструкций (ip)** — индекс текущей инструкции
-
-#### Основные инструкции
-
-| Группа | Инструкции |
-|--------|-----------|
-| Стек | `PUSH val`, `POP` |
-| Переменные | `LOAD name`, `STORE name` |
-| Массивы | `LOAD_IDX name`, `STORE_IDX name` |
-| Арифметика | `ADD`, `SUB`, `MUL`, `DIV`, `MOD`, `NEG` |
-| Сравнение | `EQ`, `NE`, `LT`, `LE`, `GT`, `GE` |
-| Логика | `AND`, `OR`, `NOT` |
-| Переходы | `JUMP addr`, `JUMP_FALSE addr` |
-| Функции | `CALL name`, `RETURN`, `RETURN_NONE` |
-| I/O | `PRINT`, `READ` |
-| Встроенные | `INC`, `DEC`, `ABS` |
-| Завершение | `HALT` |
-
-#### Просмотр байткода
+Стековая VM, 55 инструкций: `PUSH`/`POP`, `LOAD`/`STORE`, `LOAD_IDX`/`STORE_IDX`, арифметика (`ADD`/`SUB`/`MUL`/`DIV`/`MOD`/`NEG`), сравнение (`EQ`/`NE`/`LT`/`LE`/`GT`/`GE`), логика (`AND`/`OR`/`NOT`), переходы (`JUMP`/`JUMP_FALSE`), функции (`CALL`/`RETURN`), I/O (`PRINT`/`READ`), `INC`/`DEC`/`ABS`, `HALT`. Каждая функция получает свой фрейм с локальными переменными.
 
 ```bash
 python run.py examples/factorial.pas --vm --dis
 ```
 
-Пример вывода для `factorial.pas`:
-
-```
-=== main ===
-  0: PUSH         6
-  1: STORE        n
-  2: LOAD         n
-  3: CALL         fact
-  4: PRINT        nl
-  5: HALT
-
-=== fact ===
-  0: LOAD         n
-  1: PUSH         1
-  2: LE
-  3: JUMP_FALSE   7
-  4: PUSH         1
-  5: RETURN
-  6: JUMP         15
-  7: LOAD         n
-  8: LOAD         n
-  9: PUSH         1
- 10: SUB
- 11: CALL         fact
- 12: MUL
- 13: RETURN
-```
-
 ### Бэкенд: x86-32
 
-Генерирует NASM-формат, 32-битные Linux ELF (System V ABI).
-
-#### Соглашения о вызовах
-
-- Аргументы передаются через стек справа налево: `push arg_n ... push arg_1`
-- Возвращаемое значение в регистре `eax`
-- Пролог функции: `push ebp / mov ebp, esp`
-- Параметры доступны через `[ebp + 8]`, `[ebp + 12]`, ...
-- Локальные переменные через `[ebp - 4]`, `[ebp - 8]`, ...
-- Стек выравнивается вызывающей стороной: `add esp, N` после вызова
-
-#### Регистры
-
-| Регистр | Использование |
-|---------|--------------|
-| `eax` | Результат выражения, возвращаемое значение |
-| `ebx` | Второй операнд бинарной операции |
-| `ecx` | Временный (для cmov) |
-| `ebp` | База стекового фрейма |
-| `esp` | Вершина стека |
-
-#### Структура сгенерированного файла
-
-```nasm
-; Generated by Pascal x86 compiler
-; Build: nasm -f elf32 output.asm -o output.o
-;        gcc -m32 -no-pie output.o -o output
-
-section .data
-    _fmt_int   db "%d", 0       ; Write(integer)
-    _fmt_nl    db "%d", 10, 0   ; WriteLn(integer)
-    _fmt_true  db "TRUE", 10, 0
-    _fmt_false db "FALSE", 10, 0
-    _fmt_char  db "%c", 0
-
-section .bss
-    _x resd 1        ; глобальные integer-переменные
-    _flag resd 1
-
-section .text
-    global main
-    extern printf, scanf
-
-    ; --- функции пользователя ---
-_func_fact:
-    push  ebp
-    mov   ebp, esp
-    ...
-    pop   ebp
-    ret
-
-    ; --- точка входа ---
-main:
-    push  ebp
-    mov   ebp, esp
-    ...
-    xor   eax, eax
-    ret
-
-section .note.GNU-stack noalloc noexec nowrite progbits
-```
-
-#### Сборка и запуск (Linux)
+Генерирует NASM-формат, Linux ELF 32-bit (System V ABI). Глобальные переменные — в `.bss`, вычисления — через регистры `eax`/`ebx`/`ecx`. Аргументы передаются через стек справа налево (`[ebp+8]`, `[ebp+12]`, ...), локальные переменные — `[ebp-4]`, `[ebp-8]`, ... Ввод/вывод через `printf`/`scanf`.
 
 ```bash
+# Сборка на Linux:
 nasm -f elf32 output.asm -o output.o
 gcc -m32 -no-pie output.o -o output
 ./output
