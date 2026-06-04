@@ -4,7 +4,6 @@ from compiler.frontend.ast import ProgramNode, VarDeclNode
 from compiler.errors import RuntimeException
 
 
-# Фрейм вызова: локальные переменные + адрес возврата
 class Frame:
 
     def __init__(self, code: list[Instr], ret_ip: int, ret_frame: 'Frame | None'):
@@ -34,28 +33,21 @@ class Frame:
         return 0
 
     def set(self, name: str, value):
-        # Если переменная уже есть в цепочке — обновляем там
         f: Frame = self
         while f:
             if name in f.vars:
                 f.vars[name] = value
                 return
             f = f.ret_frame
-        # Новая переменная — в текущий фрейм
         self.vars[name] = value
 
 
-# Стековая виртуальная машина
 class VM:
 
     def __init__(self):
         self._stack:  list = []
         self._frame:  Frame | None = None
         self._bc:     Bytecode | None = None
-
-     
-    #  Стек                                                                
-     
 
     def _push(self, v):
         self._stack.append(v)
@@ -68,17 +60,11 @@ class VM:
     def _peek(self):
         return self._stack[-1]
 
-     
-    #  Запуск                                                              
-     
-
     def run(self, bc: Bytecode, program: ProgramNode = None) -> None:
         self._bc = bc
 
-        # Создаём главный фрейм
         main_frame = Frame(bc.main, -1, None)
 
-        # Инициализируем глобальные переменные
         if program:
             for vd in program.var_decls:
                 for var in vd.vars:
@@ -98,14 +84,12 @@ class VM:
             op  = instr.op
             arg = instr.arg
 
-            #   Стек  
             if op == Op.PUSH:
                 self._push(arg)
 
             elif op == Op.POP:
                 self._pop()
 
-            #   Переменные                       
             elif op == Op.LOAD:
                 self._push(frame.get(arg))
 
@@ -125,7 +109,6 @@ class VM:
                 lo    = frame.get_lo(arg)
                 arr[idx - lo] = value
 
-            #   Арифметика                       
             elif op == Op.ADD:
                 b, a = self._pop(), self._pop()
                 self._push(a + b)
@@ -153,7 +136,6 @@ class VM:
             elif op == Op.NEG:
                 self._push(-self._pop())
 
-            #   Сравнения
             elif op == Op.EQ:
                 b, a = self._pop(), self._pop(); self._push(a == b)
             elif op == Op.NE:
@@ -167,7 +149,6 @@ class VM:
             elif op == Op.GE:
                 b, a = self._pop(), self._pop(); self._push(a >= b)
 
-            #   Логика                         
             elif op == Op.AND:
                 b, a = self._pop(), self._pop(); self._push(a and b)
             elif op == Op.OR:
@@ -175,7 +156,6 @@ class VM:
             elif op == Op.NOT:
                 self._push(not self._pop())
 
-            #   Переходы                        
             elif op == Op.JUMP:
                 frame.ip = arg
 
@@ -183,7 +163,6 @@ class VM:
                 if not self._pop():
                     frame.ip = arg
 
-            #   Функции
             elif op == Op.CALL:
                 func_name, n_args = arg
                 args = [self._pop() for _ in range(n_args)]
@@ -201,7 +180,6 @@ class VM:
                     name = param_names[i] if i < len(param_names) else f'_arg{i}'
                     new_frame.vars[name] = val
 
-                # Инициализируем локальные переменные функции
                 for vd_info in self._bc.func_locals.get(func_name, []):
                     vname, vtype = vd_info
                     if vname not in new_frame.vars:
@@ -220,7 +198,6 @@ class VM:
                 frame = frame.ret_frame
                 self._frame = frame
 
-            #   Встроенные операции
             elif op == Op.PRINT:
                 newline = arg
                 val = self._pop()
@@ -252,16 +229,11 @@ class VM:
             elif op == Op.ABS:
                 self._push(abs(self._pop()))
 
-            #   Конец программы
             elif op == Op.HALT:
                 break
 
             else:
                 raise RuntimeException(f'Неизвестная инструкция: {op}')
-
-     
-    #  Вспомогательные методы
-     
 
     @staticmethod
     def _default(type_node) -> object:

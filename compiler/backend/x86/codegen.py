@@ -4,10 +4,6 @@ from io import StringIO
 from compiler.frontend.ast import *
 
 
- 
-# Вспомогательный класс для накопления строк asm
- 
-
 class AsmWriter:
     def __init__(self):
         self._buf = StringIO()
@@ -32,19 +28,14 @@ class AsmWriter:
         return self._buf.getvalue()
 
 
- 
-# Генератор x86
- 
-
 class X86CodeGen:
 
     def __init__(self):
-        self._data   = AsmWriter()   # секция .data  (форматные строки)
-        self._bss    = AsmWriter()   # секция .bss   (глобальные переменные)
-        self._text   = AsmWriter()   # секция .text  (код)
+        self._data   = AsmWriter()
+        self._bss    = AsmWriter()
+        self._text   = AsmWriter()
         self._label_counter = 0
 
-        # Имена строковых констант для форматов
         self._fmt_int  = '_fmt_int'
         self._fmt_bool_true  = '_fmt_true'
         self._fmt_bool_false = '_fmt_false'
@@ -53,33 +44,21 @@ class X86CodeGen:
         self._fmt_scan_char = '_fmt_scan_char'
         self._fmt_nl   = '_fmt_nl'
 
-        # Контекст: имя текущей функции и таблица локальных переменных
         self._current_func: str | None = None
-        self._locals: dict[str, int] = {}   # имя → смещение от ebp (отрицательное)
-        self._params: dict[str, int] = {}   # имя → смещение от ebp (положительное)
+        self._locals: dict[str, int] = {}
+        self._params: dict[str, int] = {}
         self._local_size: int = 0
 
-        # Глобальные переменные (для .bss)
         self._globals: set[str] = set()
 
-        # Метки для break/continue
         self._loop_end_labels:   list[str] = []
         self._loop_start_labels: list[str] = []
-
-    
-    #  Метки
-    
 
     def _new_label(self, name: str = 'L') -> str:
         self._label_counter += 1
         return f'.{name}_{self._label_counter}'
 
-    
-    #  Доступ к переменной
-    
-
     def _var_ref(self, name: str) -> str:
-        """Возвращает ссылку на переменную: [ebp±N] или [_name]."""
         if name in self._locals:
             return f'[ebp{self._locals[name]:+d}]'
         if name in self._params:
@@ -87,16 +66,11 @@ class X86CodeGen:
         return f'[_{name}]'
 
     def _var_ref_lea(self, name: str) -> str:
-        """Адрес переменной для lea."""
         if name in self._locals:
             return f'ebp{self._locals[name]:+d}'
         if name in self._params:
             return f'ebp+{self._params[name]}'
         return f'_{name}'
-
-    
-    #  Секция .data
-    
 
     def _init_data(self) -> None:
         self._data.section('.data')
@@ -108,10 +82,6 @@ class X86CodeGen:
         self._data.emit(f'{self._fmt_scan_int}  db "%d", 0')
         self._data.emit(f'{self._fmt_scan_char} db " %c", 0')
 
-    
-    #  Выражения → результат в eax
-    
-
     def _gen_expr(self, node: AstNode) -> None:
         t = self._text
 
@@ -121,17 +91,14 @@ class X86CodeGen:
             elif isinstance(node.value, int):
                 t.instr('mov', 'eax', node.value)
             elif isinstance(node.value, str):
-                # char — ASCII-код
                 t.instr('mov', 'eax', ord(node.value[0]) if node.value else 0)
 
         elif isinstance(node, IdentNode):
             t.instr('mov', 'eax', f'dword {self._var_ref(node.name)}')
 
         elif isinstance(node, ArrayAccessNode):
-            # Индекс в ecx, база в edx
             self._gen_expr(node.index)
             t.instr('mov', 'ecx', 'eax')
-            # lo хранится в типе — для простоты считаем lo=1 если не 0
             lo = 0
             if node.arr.node_type and node.arr.node_type.is_array:
                 lo = node.arr.node_type.lo
@@ -145,7 +112,7 @@ class X86CodeGen:
             if node.op == UnOp.MINUS:
                 t.instr('neg', 'eax')
             elif node.op == UnOp.NOT:
-                t.instr('xor', 'eax', 1)   # 0→1, 1→0 для boolean
+                t.instr('xor', 'eax', 1)
 
         elif isinstance(node, BinOpNode):
             self._gen_binop(node)
@@ -160,7 +127,6 @@ class X86CodeGen:
         t = self._text
         op = node.op
 
-        # Ленивые вычисления and/or
         if op == BinOp.AND:
             false_lbl = self._new_label('and_false')
             end_lbl   = self._new_label('and_end')
@@ -193,12 +159,11 @@ class X86CodeGen:
             t.label(end_lbl)
             return
 
-        # Вычисляем arg1 → eax, сохраняем на стек, arg2 → eax, берём обратно
         self._gen_expr(node.arg1)
         t.instr('push', 'eax')
         self._gen_expr(node.arg2)
-        t.instr('mov', 'ebx', 'eax')   # ebx = arg2
-        t.instr('pop', 'eax')           # eax = arg1
+        t.instr('mov', 'ebx', 'eax')
+        t.instr('pop', 'eax')
 
         if op == BinOp.ADD:
             t.instr('add', 'eax', 'ebx')
@@ -212,9 +177,8 @@ class X86CodeGen:
         elif op == BinOp.MOD:
             t.instr('cdq')
             t.instr('idiv', 'ebx')
-            t.instr('mov', 'eax', 'edx')   # остаток в edx
+            t.instr('mov', 'eax', 'edx')
         else:
-            # Сравнения → результат 0 или 1 в eax
             t.instr('cmp', 'eax', 'ebx')
             t.instr('mov', 'eax', 0)
             t.instr('mov', 'ecx', 1)
@@ -229,7 +193,6 @@ class X86CodeGen:
             t.instr(jmp, 'eax', 'ecx')
 
     def _gen_call_expr(self, node: CallNode) -> None:
-        """Вызов функции как выражения (результат в eax)."""
         t = self._text
         name = node.name.name.lower()
 
@@ -242,8 +205,6 @@ class X86CodeGen:
             t.label(lbl)
             return
 
-        # Пользовательская функция
-        # Аргументы пушим справа налево
         for p in reversed(node.params):
             self._gen_expr(p)
             t.instr('push', 'eax')
@@ -251,10 +212,6 @@ class X86CodeGen:
         t.instr('call', func_label)
         if node.params:
             t.instr('add', 'esp', len(node.params) * 4)
-
-    
-    #  Операторы
-    
 
     def _gen_stmt(self, node: AstNode) -> None:
         t = self._text
@@ -264,7 +221,7 @@ class X86CodeGen:
                 self._gen_stmt(stmt)
 
         elif isinstance(node, VarDeclNode):
-            pass  # уже объявлены в прологе
+            pass
 
         elif isinstance(node, AssignNode):
             self._gen_assign(node)
@@ -299,7 +256,6 @@ class X86CodeGen:
     def _gen_assign(self, node: AssignNode) -> None:
         t = self._text
 
-        # Pascal-стиль: funcname := value = return
         if isinstance(node.var, IdentNode) and node.var.name == self._current_func:
             self._gen_expr(node.value)
             self._gen_epilogue()
@@ -309,8 +265,7 @@ class X86CodeGen:
         self._gen_expr(node.value)
 
         if isinstance(node.var, ArrayAccessNode):
-            t.instr('push', 'eax')   # сохраняем значение
-            # Вычисляем индекс
+            t.instr('push', 'eax')
             self._gen_expr(node.var.index)
             t.instr('mov', 'ecx', 'eax')
             lo = 0
@@ -386,12 +341,10 @@ class X86CodeGen:
 
         var_ref = self._var_ref(node.var.name)
 
-        # Инициализация
         self._gen_expr(node.start)
         t.instr('mov', f'dword {var_ref}', 'eax')
 
         t.label(start)
-        # Условие
         t.instr('mov', 'eax', f'dword {var_ref}')
         self._gen_expr(node.finish)
         t.instr('mov', 'ebx', 'eax')
@@ -402,10 +355,8 @@ class X86CodeGen:
         else:
             t.instr('jg', end)
 
-        # Тело
         self._gen_stmt(node.body)
 
-        # Шаг
         if node.downto:
             t.instr('dec', f'dword {var_ref}')
         else:
@@ -427,7 +378,6 @@ class X86CodeGen:
                 self._gen_expr(p)
                 t.instr('push', 'eax')
                 if ptype and str(ptype) == 'boolean':
-                    # boolean: печатаем TRUE/FALSE
                     t.instr('pop', 'eax')
                     lbl_true = self._new_label('bool_true')
                     lbl_end  = self._new_label('bool_end')
@@ -485,7 +435,6 @@ class X86CodeGen:
             t.label(lbl)
             return
 
-        # Пользовательская процедура
         for p in reversed(node.params):
             self._gen_expr(p)
             t.instr('push', 'eax')
@@ -493,10 +442,6 @@ class X86CodeGen:
         t.instr('call', func_label)
         if node.params:
             t.instr('add', 'esp', len(node.params) * 4)
-
-    
-    #  Пролог / эпилог функции
-    
 
     def _gen_prologue(self, local_size: int) -> None:
         t = self._text
@@ -510,12 +455,7 @@ class X86CodeGen:
         t.instr('mov', 'esp', 'ebp')
         t.instr('pop', 'ebp')
 
-    
-    #  Вычисление размера локальных переменных
-    
-
     def _setup_locals(self, var_decls: list, params: list) -> int:
-        """Заполняет self._locals и self._params, возвращает размер локальных."""
         self._locals = {}
         self._params = {}
         offset = 0
@@ -529,17 +469,12 @@ class X86CodeGen:
                 offset += size
                 self._locals[var.name] = -offset
 
-        # Параметры: [ebp+8], [ebp+12], ...
         param_offset = 8
         for p in params:
             self._params[p.name.name] = param_offset
             param_offset += 4
 
         return offset
-
-    
-    #  Глобальные переменные → .bss
-    
 
     def _declare_globals(self, var_decls: list) -> None:
         for vd in var_decls:
@@ -550,10 +485,6 @@ class X86CodeGen:
                     self._bss.emit(f'    _{var.name} resd {vd.type.hi - vd.type.lo + 1}')
                 else:
                     self._bss.emit(f'    _{var.name} resd 1')
-
-    
-    #  Генерация функции
-    
 
     def _gen_func(self, func: FuncNode) -> None:
         t = self._text
@@ -569,34 +500,24 @@ class X86CodeGen:
 
         self._gen_stmt(func.body)
 
-        # Дефолтный эпилог (для процедур и функций без явного return)
         self._gen_epilogue()
         t.instr('ret')
 
         self._current_func = None
 
-    
-    #  Точка входа — генерация программы
-    
-
     def generate(self, program: ProgramNode) -> str:
-        # .data
         self._init_data()
 
-        # .bss — глобальные переменные
         self._bss.section('.bss')
         self._declare_globals(program.var_decls)
 
-        # .text — заголовок
         self._text.section('.text')
         self._text.emit('    global main')
         self._text.emit('    extern printf, scanf')
 
-        # Функции и процедуры
         for func in program.func_decls:
             self._gen_func(func)
 
-        # main
         self._current_func = None
         self._locals = {}
         self._params = {}
@@ -609,10 +530,9 @@ class X86CodeGen:
         self._gen_stmt(program.body)
 
         self._gen_epilogue()
-        self._text.instr('xor', 'eax', 'eax')   # return 0
+        self._text.instr('xor', 'eax', 'eax')
         self._text.instr('ret')
 
-        # Собираем всё вместе
         out = StringIO()
         out.write('; Generated by Pascal x86 compiler\n')
         out.write('; Build: nasm -f elf32 output.asm -o output.o\n')
@@ -625,10 +545,5 @@ class X86CodeGen:
         return out.getvalue()
 
 
- 
-# Публичная функция
- 
-
 def compile_to_x86(program: ProgramNode) -> str:
-    """Возвращает строку с NASM-листингом."""
     return X86CodeGen().generate(program)

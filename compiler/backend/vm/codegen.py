@@ -2,7 +2,6 @@ from compiler.frontend.ast import *
 from compiler.backend.vm.opcodes import Op, Instr
 
 
-# Результат компиляции: инструкции + таблица функций
 class Bytecode:
 
     def __init__(self):
@@ -22,7 +21,6 @@ class Bytecode:
         return '\n'.join(lines)
 
 
-# Метка — пока не разрешена, хранит имя
 class _Label:
     _counter = 0
 
@@ -34,17 +32,12 @@ class _Label:
         return f'<{self.name}>'
 
 
-# Генерирует байткод для одной функции (или главного тела)
 class CodeGen:
 
     def __init__(self):
         self._code:  list[Instr | _Label] = []
         self._loops:     list[tuple[_Label, _Label]] = []
         self._func_name: str | None                  = None
-
-    
-    #  Публичный API
-    
 
     def emit(self, op: Op, arg=None, row: int = None) -> None:
         self._code.append(Instr(op, arg, row))
@@ -57,7 +50,6 @@ class CodeGen:
         self._code.append(lbl)
 
     def resolve(self) -> list[Instr]:
-        # Первый проход: собираем адреса меток (метки не занимают слот)
         addr: dict[str, int] = {}
         idx = 0
         for item in self._code:
@@ -66,7 +58,6 @@ class CodeGen:
             else:
                 idx += 1
 
-        # Второй проход: подставляем адреса
         result: list[Instr] = []
         for item in self._code:
             if isinstance(item, _Label):
@@ -76,10 +67,6 @@ class CodeGen:
                 item = Instr(item.op, addr[lbl.name], item.row)
             result.append(item)
         return result
-
-    
-    #  Генерация выражений
-    
 
     def gen_expr(self, node: AstNode) -> None:
         if isinstance(node, LiteralNode):
@@ -101,7 +88,6 @@ class CodeGen:
                 self.emit(Op.NEG, row=node.row)
             elif node.op == UnOp.NOT:
                 self.emit(Op.NOT, row=node.row)
-            # UnOp.PLUS — ничего не делаем
 
         elif isinstance(node, CallNode):
             self._gen_call(node)
@@ -113,7 +99,6 @@ class CodeGen:
             raise NotImplementedError(f'gen_expr: {type(node).__name__}')
 
     def _gen_binop(self, node: BinOpNode) -> None:
-        # Ленивые вычисления для and/or
         if node.op == BinOp.AND:
             end = self.label('and_end')
             self.gen_expr(node.arg1)
@@ -125,8 +110,6 @@ class CodeGen:
             true_lbl = self.label('or_true')
             end = self.label('or_end')
             self.gen_expr(node.arg1)
-            # если истина — прыгаем через второй операнд
-            # реализуем через NOT + JUMP_FALSE
             self.emit(Op.NOT, row=node.row)
             self.emit(Op.JUMP_FALSE, true_lbl, node.row)
             self.gen_expr(node.arg2)
@@ -181,14 +164,9 @@ class CodeGen:
             self.emit(Op.ABS, row=node.row)
             return
 
-        # Пользовательская функция/процедура
         for p in node.params:
             self.gen_expr(p)
         self.emit(Op.CALL, (node.name.name, len(node.params)), node.row)
-
-    
-    #  Генерация операторов
-    
 
     def gen_stmt(self, node: AstNode) -> None:
 
@@ -197,7 +175,7 @@ class CodeGen:
                 self.gen_stmt(stmt)
 
         elif isinstance(node, VarDeclNode):
-            pass  # переменные объявляются при входе во фрейм VM
+            pass
 
         elif isinstance(node, AssignNode):
             self._gen_assign(node)
@@ -235,7 +213,6 @@ class CodeGen:
 
         elif isinstance(node, CallNode):
             self._gen_call(node)
-            # Если вызов возвращает значение — снимаем со стека
             if node.node_type and str(node.node_type) != 'void':
                 self.emit(Op.POP)
 
@@ -243,7 +220,6 @@ class CodeGen:
             raise NotImplementedError(f'gen_stmt: {type(node).__name__}')
 
     def _gen_assign(self, node: AssignNode) -> None:
-        # Pascal-стиль: fact := value — присваивание имени функции = return
         if isinstance(node.var, IdentNode) and node.var.name == self._func_name:
             self.gen_expr(node.value)
             self.emit(Op.RETURN, row=node.row)
@@ -304,22 +280,18 @@ class CodeGen:
 
         var = node.var.name
 
-        # Инициализация
         self.gen_expr(node.start)
         self.emit(Op.STORE, var, node.row)
 
         self.place(start)
 
-        # Условие: i <= finish (to) или i >= finish (downto)
         self.emit(Op.LOAD, var)
         self.gen_expr(node.finish)
         self.emit(Op.GE if node.downto else Op.LE)
         self.emit(Op.JUMP_FALSE, end)
 
-        # Тело
         self.gen_stmt(node.body)
 
-        # Шаг
         self.emit(Op.LOAD, var)
         self.emit(Op.PUSH, 1)
         self.emit(Op.SUB if node.downto else Op.ADD)
@@ -332,13 +304,9 @@ class CodeGen:
 
 
 
-#  Точка входа                                                         
-
-
 def compile_to_bytecode(program: ProgramNode) -> Bytecode:
     bc = Bytecode()
 
-    # Компилируем каждую функцию/процедуру
     for func in program.func_decls:
         name = func.name.name
         cg = CodeGen()
@@ -346,16 +314,13 @@ def compile_to_bytecode(program: ProgramNode) -> Bytecode:
         cg.gen_stmt(func.body)
         cg.emit(Op.RETURN_NONE)
         bc.funcs[name] = cg.resolve()
-        # Сохраняем имена параметров для VM
         bc.func_params[name] = [p.name.name for p in func.params]
-        # Сохраняем локальные переменные для VM
         bc.func_locals[name] = [
             (v.name, vd.type.name)
             for vd in func.var_decls
             for v in vd.vars
         ]
 
-    # Компилируем главное тело
     cg = CodeGen()
     cg.gen_stmt(program.body)
     cg.emit(Op.HALT)
